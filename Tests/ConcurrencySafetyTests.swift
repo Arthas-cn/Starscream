@@ -89,6 +89,30 @@ final class ConcurrencySafetyTests: XCTestCase {
         }
     }
 
+    func testWSEngineCanBeReleasedFromWriteCompletionWithoutDeadlock() {
+        let iterations = Self.environmentInt("STARSCREAM_ENGINE_RELEASE_FROM_WRITE_COMPLETION_ITERATIONS", defaultValue: 200)
+
+        for iteration in 0..<iterations {
+            let completion = DispatchSemaphore(value: 0)
+            var engine: WSEngine? = WSEngine(transport: ConcurrentTestTransport(),
+                                             headerValidator: MockSecurity(),
+                                             httpHandler: ImmediateUpgradeHTTPHandler())
+            let delegate = RecordingEngineDelegate()
+            let request = URLRequest(url: URL(string: "ws://localhost/socket")!)
+
+            engine?.register(delegate: delegate)
+            engine?.start(request: request)
+            XCTAssertTrue(delegate.waitFor(.connected, timeout: 2), "Engine did not connect on iteration \(iteration)")
+
+            engine?.write(data: Data([0x01]), opcode: .binaryFrame) {
+                engine = nil
+                completion.signal()
+            }
+
+            XCTAssertEqual(completion.wait(timeout: .now() + .seconds(5)), .success, "Engine release from write completion timed out on iteration \(iteration)")
+        }
+    }
+
 #if canImport(Darwin)
     func testFoundationTransportSurvivesConcurrentWriteAndDisconnect() throws {
         let iterations = Self.environmentInt("STARSCREAM_FOUNDATION_TRANSPORT_STRESS_ITERATIONS", defaultValue: 100)
@@ -208,6 +232,29 @@ final class ConcurrencySafetyTests: XCTestCase {
             }
 
             XCTAssertEqual(completion.wait(timeout: .now() + .seconds(2)), .success, "Write after disconnect did not complete on iteration \(iteration)")
+        }
+    }
+
+    func testFoundationTransportCanBeReleasedFromWriteCompletionWithoutDeadlock() throws {
+        let iterations = Self.environmentInt("STARSCREAM_FOUNDATION_TRANSPORT_RELEASE_FROM_WRITE_COMPLETION_ITERATIONS", defaultValue: 100)
+        let server = try LocalTCPDrainServer()
+        let url = URL(string: "ws://127.0.0.1:\(server.port)/socket")!
+        let payload = Data(repeating: 0x21, count: 8)
+
+        for iteration in 0..<iterations {
+            let completion = DispatchSemaphore(value: 0)
+            var transport: FoundationTransport? = FoundationTransport()
+            let delegate = RecordingTransportDelegate()
+
+            transport?.register(delegate: delegate)
+            transport?.connect(url: url, timeout: 2, certificatePinning: nil)
+            XCTAssertTrue(delegate.waitForConnected(timeout: 2), "FoundationTransport did not connect on iteration \(iteration)")
+            transport?.write(data: payload) { _ in
+                transport = nil
+                completion.signal()
+            }
+
+            XCTAssertEqual(completion.wait(timeout: .now() + .seconds(5)), .success, "FoundationTransport release from write completion timed out on iteration \(iteration)")
         }
     }
 

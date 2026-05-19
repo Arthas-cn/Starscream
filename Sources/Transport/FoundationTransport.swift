@@ -53,7 +53,9 @@ public class FoundationTransport: NSObject, Transport, StreamDelegate {
     }
     
     deinit {
-        detachStreams()
+        syncOnWorkQueue {
+            detachStreams()
+        }
     }
     
     public func connect(url: URL, timeout: Double = 10, certificatePinning: CertificatePinning? = nil) {
