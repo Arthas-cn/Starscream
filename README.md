@@ -204,7 +204,7 @@ Once you have your Swift package set up, adding Starscream as a dependency is as
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/daltoniam/Starscream.git", from: "4.0.6")
+    .package(url: "https://github.com/Arthas-cn/Starscream.git", from: "4.0.9")
 ]
 ```
 
@@ -218,7 +218,7 @@ To use Starscream in your project add the following 'Podfile' to your project
 	platform :ios, '12.0'
 	use_frameworks!
 
-	pod 'Starscream', '~> 4.0.6'
+	pod 'Starscream', '~> 4.0.9'
 
 Then run:
 
@@ -240,7 +240,7 @@ $ brew install carthage
 To integrate Starscream into your Xcode project using Carthage, specify it in your `Cartfile`:
 
 ```
-github "daltoniam/Starscream" >= 4.0.6
+github "Arthas-cn/Starscream" >= 4.0.9
 ```
 
 ### Other

@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file.
 `Starscream` adheres to [Semantic Versioning](http://semver.org/).
 
+### [4.0.9](https://github.com/Arthas-cn/Starscream/tree/4.0.9)
+
+Bug fixes for 4.0.4.
+
+* Fixed FoundationTransport stream lifecycle races that could crash in OutputStream callbacks.
+* Serialized stream connect, write, disconnect, and teardown on the transport work queue.
+* Added concurrency safety coverage for write, disconnect, reconnect, deinit, and release-from-callback cases.
+
 ### [4.0.4](https://github.com/daltoniam/Starscream/tree/4.0.4)
 
 Bug fixes for 4.0.3.
