@@ -36,6 +36,7 @@
 		8A906E3F2208C7E80015057D /* WSCompression.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A906E3E2208C7E80015057D /* WSCompression.swift */; };
 		8ABD4470224C036A00FB8370 /* Data+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ABD446F224C036A00FB8370 /* Data+Extensions.swift */; };
 		BBB5ABE8215E2217005B48B6 /* WebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB5ABE4215E2217005B48B6 /* WebSocket.swift */; };
+		C90B550D2FBC12E7003AC109 /* ConcurrencySafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90B550C2FBC12E7003AC109 /* ConcurrencySafetyTests.swift */; };
 		FC7E667D2B90B3AD00881886 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FC7E667C2B90B3AD00881886 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -79,6 +80,7 @@
 		8A906E3E2208C7E80015057D /* WSCompression.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = WSCompression.swift; path = Compression/WSCompression.swift; sourceTree = "<group>"; };
 		8ABD446F224C036A00FB8370 /* Data+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Data+Extensions.swift"; sourceTree = "<group>"; };
 		BBB5ABE4215E2217005B48B6 /* WebSocket.swift */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.swift; name = WebSocket.swift; path = Starscream/WebSocket.swift; sourceTree = "<group>"; tabWidth = 4; };
+		C90B550C2FBC12E7003AC109 /* ConcurrencySafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcurrencySafetyTests.swift; sourceTree = "<group>"; };
 		D88EAF811ED4DFD3004FE2C3 /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
 		D88EAF831ED4E7D8004FE2C3 /* CompressionTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CompressionTests.swift; sourceTree = "<group>"; };
 		FC7E667C2B90B3AD00881886 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -171,6 +173,7 @@
 		6B3E79FF19D48C2F006071F7 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				C90B550C2FBC12E7003AC109 /* ConcurrencySafetyTests.swift */,
 				6B3E7A0019D48C2F006071F7 /* Info.plist */,
 				742419BB1DC6BDBA003ACE43 /* StarscreamTests.swift */,
 				D88EAF831ED4E7D8004FE2C3 /* CompressionTests.swift */,
@@ -350,6 +353,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C90B550D2FBC12E7003AC109 /* ConcurrencySafetyTests.swift in Sources */,
 				5CF1D064225055760081C8A8 /* Data+Extensions.swift in Sources */,
 				8A7A719C220248330061166D /* MockServer.swift in Sources */,
 				8A7A719921FFB4650061166D /* MockTransport.swift in Sources */,

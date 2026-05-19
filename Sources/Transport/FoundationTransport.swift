@@ -31,70 +31,97 @@ public enum FoundationTransportError: Error {
 public class FoundationTransport: NSObject, Transport, StreamDelegate {
     private weak var delegate: TransportEventClient?
     private let workQueue = DispatchQueue(label: "com.vluxe.starscream.websocket", attributes: [])
+    private let workQueueKey = DispatchSpecificKey<Void>()
     private var inputStream: InputStream?
     private var outputStream: OutputStream?
     private var isOpen = false
+    private var connectionID = 0
     private var onConnect: ((InputStream, OutputStream) -> Void)?
     private var isTLS = false
     private var certPinner: CertificatePinning?
     
     public var usingTLS: Bool {
-        return self.isTLS
+        return syncOnWorkQueue {
+            return self.isTLS
+        }
     }
     
     public init(streamConfiguration: ((InputStream, OutputStream) -> Void)? = nil) {
         super.init()
+        workQueue.setSpecific(key: workQueueKey, value: ())
         onConnect = streamConfiguration
     }
     
     deinit {
-        inputStream?.delegate = nil
-        outputStream?.delegate = nil
+        detachStreams()
     }
     
     public func connect(url: URL, timeout: Double = 10, certificatePinning: CertificatePinning? = nil) {
         guard let parts = url.getParts() else {
-            delegate?.connectionChanged(state: .failed(FoundationTransportError.invalidRequest))
+            syncOnWorkQueue {
+                delegate?.connectionChanged(state: .failed(FoundationTransportError.invalidRequest))
+            }
             return
         }
-        self.certPinner = certificatePinning
-        self.isTLS = parts.isTLS
-        var readStream: Unmanaged<CFReadStream>?
-        var writeStream: Unmanaged<CFWriteStream>?
-        let h = parts.host as NSString
-        CFStreamCreatePairWithSocketToHost(nil, h, UInt32(parts.port), &readStream, &writeStream)
-        inputStream = readStream!.takeRetainedValue()
-        outputStream = writeStream!.takeRetainedValue()
-        guard let inStream = inputStream, let outStream = outputStream else {
+
+        syncOnWorkQueue {
+            performDisconnect()
+            connectionID += 1
+            let currentConnectionID = connectionID
+
+            self.certPinner = certificatePinning
+            self.isTLS = parts.isTLS
+            var readStream: Unmanaged<CFReadStream>?
+            var writeStream: Unmanaged<CFWriteStream>?
+            let h = parts.host as NSString
+            CFStreamCreatePairWithSocketToHost(nil, h, UInt32(parts.port), &readStream, &writeStream)
+
+            inputStream = readStream?.takeRetainedValue()
+            outputStream = writeStream?.takeRetainedValue()
+            guard let inStream = inputStream,
+                  let outStream = outputStream else {
                 return
-        }
-        inStream.delegate = self
-        outStream.delegate = self
-    
-        if isTLS {
-            let key = CFStreamPropertyKey(rawValue: kCFStreamPropertySocketSecurityLevel)
-            CFReadStreamSetProperty(inStream, key, kCFStreamSocketSecurityLevelNegotiatedSSL)
-            CFWriteStreamSetProperty(outStream, key, kCFStreamSocketSecurityLevelNegotiatedSSL)
-        }
-        
-        onConnect?(inStream, outStream)
-        
-        isOpen = false
-        CFReadStreamSetDispatchQueue(inStream, workQueue)
-        CFWriteStreamSetDispatchQueue(outStream, workQueue)
-        inStream.open()
-        outStream.open()
-        
-        
-        workQueue.asyncAfter(deadline: .now() + timeout, execute: { [weak self] in
-            guard let s = self else { return }
-            if !s.isOpen {
-                s.delegate?.connectionChanged(state: .failed(FoundationTransportError.timeout))
             }
-        })
+
+            inStream.delegate = self
+            outStream.delegate = self
+    
+            if isTLS {
+                let key = CFStreamPropertyKey(rawValue: kCFStreamPropertySocketSecurityLevel)
+                CFReadStreamSetProperty(inStream, key, kCFStreamSocketSecurityLevelNegotiatedSSL)
+                CFWriteStreamSetProperty(outStream, key, kCFStreamSocketSecurityLevelNegotiatedSSL)
+            }
+        
+            onConnect?(inStream, outStream)
+        
+            isOpen = false
+            CFReadStreamSetDispatchQueue(inStream, workQueue)
+            CFWriteStreamSetDispatchQueue(outStream, workQueue)
+            inStream.open()
+            outStream.open()
+        
+        
+            workQueue.asyncAfter(deadline: .now() + timeout, execute: { [weak self] in
+                guard let s = self else { return }
+                if s.connectionID == currentConnectionID && !s.isOpen {
+                    s.delegate?.connectionChanged(state: .failed(FoundationTransportError.timeout))
+                }
+            })
+        }
     }
     
     public func disconnect() {
+        syncOnWorkQueue {
+            connectionID += 1
+            performDisconnect()
+        }
+    }
+
+    private func performDisconnect() {
+        detachStreams()
+    }
+
+    private func detachStreams() {
         if let stream = inputStream {
             stream.delegate = nil
             CFReadStreamSetDispatchQueue(stream, nil)
@@ -111,26 +138,50 @@ public class FoundationTransport: NSObject, Transport, StreamDelegate {
     }
     
     public func register(delegate: TransportEventClient) {
-        self.delegate = delegate
+        syncOnWorkQueue {
+            self.delegate = delegate
+        }
     }
     
     public func write(data: Data, completion: @escaping ((Error?) -> ())) {
-        guard let outStream = outputStream else {
-            completion(FoundationTransportError.invalidOutputStream)
-            return
-        }
-        var total = 0
-        let buffer = UnsafeRawPointer((data as NSData).bytes).assumingMemoryBound(to: UInt8.self)
-        //NOTE: this might need to be dispatched to the work queue instead of being written inline. TBD.
-        while total < data.count {
-            let written = outStream.write(buffer, maxLength: data.count)
-            if written < 0 {
+        syncOnWorkQueue {
+            guard let outStream = outputStream else {
                 completion(FoundationTransportError.invalidOutputStream)
                 return
             }
-            total += written
+
+            if data.isEmpty {
+                completion(nil)
+                return
+            }
+
+            guard outStream.hasSpaceAvailable else {
+                completion(FoundationTransportError.invalidOutputStream)
+                return
+            }
+
+            let result = data.withUnsafeBytes { bytes -> Error? in
+                guard let baseAddress = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                    return nil
+                }
+
+                var total = 0
+                while total < data.count {
+                    if !outStream.hasSpaceAvailable {
+                        return FoundationTransportError.invalidOutputStream
+                    }
+
+                    let written = outStream.write(baseAddress.advanced(by: total), maxLength: data.count - total)
+                    if written <= 0 {
+                        return FoundationTransportError.invalidOutputStream
+                    }
+                    total += written
+                }
+                return nil
+            }
+
+            completion(result)
         }
-        completion(nil)
     }
     
     private func getSecurityData() -> (SecTrust?, String?) {
@@ -173,10 +224,24 @@ public class FoundationTransport: NSObject, Transport, StreamDelegate {
         let data = Data(bytes: buffer, count: length)
         delegate?.connectionChanged(state: .receive(data))
     }
+
+    private func syncOnWorkQueue<T>(_ work: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: workQueueKey) != nil {
+            return work()
+        }
+
+        return workQueue.sync(execute: work)
+    }
     
     // MARK: - StreamDelegate
     
     open func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
+        syncOnWorkQueue {
+            handleStream(aStream, eventCode: eventCode)
+        }
+    }
+
+    private func handleStream(_ aStream: Stream, eventCode: Stream.Event) {
         switch eventCode {
         case .hasBytesAvailable:
             if aStream == inputStream {
@@ -192,24 +257,26 @@ public class FoundationTransport: NSObject, Transport, StreamDelegate {
             if aStream == inputStream {
                 let (trust, domain) = getSecurityData()
                 if let pinner = certPinner, let trust = trust {
+                    let currentConnectionID = connectionID
                     pinner.evaluateTrust(trust: trust, domain:  domain, completion: { [weak self] (state) in
-                        switch state {
-                        case .success:
-                            self?.isOpen = true
-                            self?.delegate?.connectionChanged(state: .connected)
-                        case .failed(let error):
-                            self?.delegate?.connectionChanged(state: .failed(error))
+                        self?.workQueue.async { [weak self] in
+                            guard let s = self, s.connectionID == currentConnectionID, aStream == s.inputStream else {
+                                return
+                            }
+
+                            switch state {
+                            case .success:
+                                s.isOpen = true
+                                s.delegate?.connectionChanged(state: .connected)
+                            case .failed(let error):
+                                s.delegate?.connectionChanged(state: .failed(error))
+                            }
                         }
-                        
                     })
                 } else {
                     isOpen = true
                     delegate?.connectionChanged(state: .connected)
                 }
-            }
-        case .endEncountered:
-            if aStream == inputStream {
-                delegate?.connectionChanged(state: .cancelled)
             }
         default:
             break

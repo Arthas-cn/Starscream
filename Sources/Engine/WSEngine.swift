@@ -87,6 +87,16 @@ FrameCollectorDelegate, HTTPHandlerDelegate {
     }
     
     public func stop(closeCode: UInt16 = CloseCode.normal.rawValue) {
+        mutex.wait()
+        let canWriteCloseFrame = canSend
+        mutex.signal()
+
+        if !canWriteCloseFrame {
+            reset()
+            forceStop()
+            return
+        }
+
         let capacity = MemoryLayout<UInt16>.size
         var pointer = [UInt8](repeating: 0, count: capacity)
         writeUint16(&pointer, offset: 0, value: closeCode)
@@ -117,6 +127,7 @@ FrameCollectorDelegate, HTTPHandlerDelegate {
             let canWrite = s.canSend
             s.mutex.signal()
             if !canWrite {
+                completion?()
                 return
             }
             
@@ -152,7 +163,11 @@ FrameCollectorDelegate, HTTPHandlerDelegate {
         case .shouldReconnect(let status):
             broadcast(event: .reconnectSuggested(status))
         case .receive(let data):
-            if didUpgrade {
+            mutex.wait()
+            let hasUpgraded = didUpgrade
+            mutex.signal()
+
+            if hasUpgraded {
                 framer.add(data: data)
             } else {
                 let offset = httpHandler.parse(data: data)

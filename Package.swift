@@ -31,7 +31,11 @@ let package = Package(
         targets: [
             .target(name: "Starscream",
                     path: "Sources",
-                    resources: [.copy("PrivacyInfo.xcprivacy")])
+                    resources: [.copy("PrivacyInfo.xcprivacy")]),
+            .testTarget(name: "StarscreamTests",
+                        dependencies: ["Starscream"],
+                        path: "Tests",
+                        exclude: ["Info.plist"])
         ]
 )
 
